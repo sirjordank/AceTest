@@ -20,8 +20,8 @@ namespace AceTest {
             _meshRenderer = GetComponent<MeshRenderer>();
         }
 
-        private void Update() {
-            if (HasStateAuthority && Input.GetKeyDown(KeyCode.E)) {
+        private void Start() {
+            if (HasStateAuthority) {
                 // Changing the material color here directly does not work since this code is only executed on the client pressing the button and not on every client.
                 NetworkedColor = new Color(Random.value, Random.value, Random.value, 1f);
             }
