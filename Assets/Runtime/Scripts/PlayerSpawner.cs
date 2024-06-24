@@ -2,6 +2,7 @@ using Fusion;
 using UnityEngine;
 
 namespace AceTest {
+    /// <summary></summary>
     public class PlayerSpawner : SimulationBehaviour, IPlayerJoined {
 
         #region Instance Vars
@@ -10,6 +11,8 @@ namespace AceTest {
         private GameObject _playerPrefab;
 
         #endregion
+
+
 
         #region Event Handlers
 

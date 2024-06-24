@@ -1,6 +1,7 @@
 using UnityEngine;
 
 namespace AceTest {
+    /// <summary></summary>
     public class FirstPersonCamera : MonoBehaviour {
 
         #region Instance Vars
@@ -14,6 +15,8 @@ namespace AceTest {
         public Transform Target { get; set; }
 
         #endregion
+
+
 
         void LateUpdate() {
             if (Target == null) return;

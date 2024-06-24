@@ -2,6 +2,7 @@ using Fusion;
 using UnityEngine;
 
 namespace AceTest {
+    /// <summary></summary>
     public class PlayerColor : NetworkBehaviour {
 
         #region Instance Vars
@@ -12,6 +13,8 @@ namespace AceTest {
         public Color NetworkedColor { get; set; }
 
         #endregion
+
+
 
         private void Awake() {
             _meshRenderer = GetComponent<MeshRenderer>();

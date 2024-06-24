@@ -2,6 +2,7 @@ using Fusion;
 using UnityEngine;
 
 namespace AceTest {
+    /// <summary></summary>
     public class PlayerMovement : NetworkBehaviour {
 
         #region Instance Vars
@@ -21,6 +22,8 @@ namespace AceTest {
         }
 
         #endregion
+
+
 
         void Update() {
             if (Input.GetButtonDown("Jump")) {
