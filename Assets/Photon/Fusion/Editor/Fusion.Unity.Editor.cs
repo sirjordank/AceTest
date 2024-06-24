@@ -1,21 +1,5 @@
 #if !FUSION_DEV
 
-#region Assets/Photon/Fusion/Editor/AssemblyAttributes/FusionEditorAssemblyAttributes.Common.cs
-
-// merged EditorAssemblyAttributes
-
-#region RegisterEditorLoader.cs
-
-// the default edit-mode loader
-[assembly:Fusion.Editor.FusionGlobalScriptableObjectEditorAttribute(typeof(Fusion.FusionGlobalScriptableObject), AllowEditMode = true, Order = int.MaxValue)]
-
-#endregion
-
-
-
-#endregion
-
-
 #region Assets/Photon/Fusion/Editor/AssetObjectEditor.cs
 
 namespace Fusion.Editor {
@@ -2533,14 +2517,6 @@ namespace Fusion.Editor {
 
       IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
-
-    public static void RegisterCustomDependencyWithMppmWorkaround(string customDependency, Hash128 hash) {
-      FusionMppm.Broadcast(new FusionMppmRegisterCustomDependencyCommand() { 
-        DependencyName = customDependency, 
-        Hash = hash.ToString(),
-      });
-      AssetDatabase.RegisterCustomDependency(customDependency, hash);
-    }
   }
 }
 
@@ -3402,6 +3378,7 @@ namespace Fusion.Editor {
     private static string SanitizeTypeName(Type type) {
       return type.FullName.Replace('+', '.');
     }
+
     public static void InvalidateCache() {
       _parsedCodeDocs.Clear();
       _guiContentCache.Clear();
@@ -3514,23 +3491,14 @@ namespace Fusion.Editor {
           if (AssetDatabaseUtils.HasLabel(path, Label)) {
             FusionEditorLog.Trace($"Code doc {path} was imported, refreshing");
             InvalidateCache();
-            continue;
           }
 
           // is there a dll with the same name?
-          if (!File.Exists(path.Substring(0, path.Length - ExtensionWithDot.Length) + ".dll")) {
-            FusionEditorLog.Trace($"No DLL next to {path}, not going to add label {Label}.");
-            continue;
+          if (File.Exists(path.Substring(0, path.Length - ExtensionWithDot.Length) + ".dll")) {
+            FusionEditorLog.Trace($"Detected a dll next to {path}, applying label and refreshing.");
+            AssetDatabaseUtils.SetLabel(path, Label, true);
+            InvalidateCache();
           }
-
-          if (!path.StartsWith("Assets/Photon/")) {
-            FusionEditorLog.Trace($"DLL is out of supported folder, not going to add label: {path}");
-            continue;
-          }
-
-          FusionEditorLog.Trace($"Detected a dll next to {path}, applying label and refreshing.");
-          AssetDatabaseUtils.SetLabel(path, Label, true);
-          InvalidateCache();
         }
       }
     }
@@ -4486,7 +4454,7 @@ namespace Fusion.Editor {
     }
     
     public static System.Type GetDrawerTypeIncludingWorkarounds(System.Attribute attribute) {
-      var drawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(attribute.GetType(), false);
+      var drawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(attribute.GetType());
       if (drawerType == null) {
         return null;
       }
@@ -4503,9 +4471,6 @@ namespace Fusion.Editor {
 
       foreach (var baseType in baseTypes) {
         types.AddRange(TypeCache.GetTypesDerivedFrom(baseType).Where(filter));
-        if (filter(baseType)) {
-          types.Add(baseType);
-        }
       }
 
       if (baseTypes.Length > 1) {
@@ -4597,32 +4562,6 @@ namespace Fusion.Editor {
 #endregion
 
 
-#region FusionGlobalScriptableObjectEditorAttribute.cs
-
-namespace Fusion.Editor {
-  using System;
-  using UnityEditor;
-
-  class FusionGlobalScriptableObjectEditorAttribute : FusionGlobalScriptableObjectSourceAttribute {
-    public FusionGlobalScriptableObjectEditorAttribute(Type objectType) : base(objectType) {
-    }
-
-    public override FusionGlobalScriptableObjectLoadResult Load(Type type) {
-      var defaultAssetPath = FusionGlobalScriptableObjectUtils.FindDefaultAssetPath(type, fallbackToSearchWithoutLabel: true);
-      if (string.IsNullOrEmpty(defaultAssetPath)) {
-        return default;
-      }
-
-      var result = (FusionGlobalScriptableObject)AssetDatabase.LoadAssetAtPath(defaultAssetPath, type);
-      FusionEditorLog.Assert(result);
-      return result;
-    }
-  }
-}
-
-#endregion
-
-
 #region FusionGlobalScriptableObjectUtils.cs
 
 namespace Fusion.Editor {
@@ -4657,6 +4596,19 @@ namespace Fusion.Editor {
       }
 
       return attribute;
+    }
+    
+    [FusionGlobalScriptableObjectLoaderMethod(Order = int.MaxValue)]
+    public static FusionGlobalScriptableObjectLoadResult LoadEditorInstance(Type type) {
+      
+      var defaultAssetPath = FindDefaultAssetPath(type, fallbackToSearchWithoutLabel: true);
+      if (string.IsNullOrEmpty(defaultAssetPath)) {
+        return default;
+      }
+
+      var result = (FusionGlobalScriptableObject)AssetDatabase.LoadAssetAtPath(defaultAssetPath, type);
+      FusionEditorLog.Assert(result);
+      return result;
     }
 
     public static bool EnsureAssetExists<T>() where T : FusionGlobalScriptableObject<T> {
@@ -4744,7 +4696,7 @@ namespace Fusion.Editor {
       return true;
     }
     
-    internal static string FindDefaultAssetPath(Type type, bool fallbackToSearchWithoutLabel = false) {
+    private static string FindDefaultAssetPath(Type type, bool fallbackToSearchWithoutLabel = false) {
       
       // first try to locate assets of the type, with the default label
       var defaults = AssetDatabaseUtils.IterateAssets(type: type, label: GlobalAssetLabel)
@@ -5221,8 +5173,6 @@ namespace Fusion.Editor {
 
 namespace Fusion.Editor {
   using System;
-  using System.Collections;
-  using System.Collections.Generic;
   using System.Text;
   using UnityEditor;
   using UnityEngine;
@@ -5282,48 +5232,8 @@ namespace Fusion.Editor {
       }
     }
 
-    public void Refresh(IList<byte> values, int maxLength = 2048) {
-      Assert.Check(values != null);
-      
-      const int charactersPerElement = 2;
-      int arraySize = values.Count;
-      int arrayHash = 0;
-      int effectiveArraySize;
-      {
-        int length = 0;
-        int i;
-        for (i = 0; i < arraySize && length < maxLength; ++i) {
-          arrayHash = arrayHash * 31 + values[i];
-          length += charactersPerElement + 1;
-        }
-
-        effectiveArraySize = i;
-      }
-
-      if (_builder == null || arrayHash != _lastHash) {
-        var format = "{0:x" + charactersPerElement + "} ";
-
-        _builder ??= new StringBuilder();
-        _builder.Clear();
-
-        for (int i = 0; i < effectiveArraySize; ++i) {
-          _builder.AppendFormat(format, values[i]);
-        }
-
-        if (effectiveArraySize < arraySize) {
-          _builder.AppendLine("...");
-        }
-
-        _lastHash = arrayHash;
-        _lastValue = new GUIContent(_builder.ToString());
-      } else {
-        Debug.Assert(_lastValue != null);
-      }
-    }
-    
     public void Refresh(SerializedProperty property, int maxLength = 2048) {
-      Assert.Check(property != null);
-      Assert.Check(property.isArray);
+      Debug.Assert(property.isArray);
 
       int charactersPerElement;
       switch (property.arrayElementType) {
@@ -5392,11 +5302,6 @@ namespace Fusion.Editor {
       var id = GUIUtility.GetControlID(UnityInternal.EditorGUI.DelayedTextFieldHash, FocusType.Keyboard, position);
       return UnityInternal.EditorGUI.DelayedTextFieldInternal(position, id, label, _lastValue.text ?? string.Empty, "0123456789abcdefABCDEF ", FusionEditorSkin.RawDataStyle);
     }
-
-    public string DrawLayout() {
-      var position = EditorGUILayout.GetControlRect(false, 18f, FusionEditorSkin.RawDataStyle);
-      return Draw(position);
-    }
   }
 }
 
@@ -5459,16 +5364,10 @@ namespace Fusion.Editor {
         throw new InvalidOperationException(CreateMethodExceptionMessage(assembly, typeName, methodName, flags, delegateType), ex);
       }
     }
-    
-    internal static T CreateMethodDelegate<T>(this Type type, string methodName, BindingFlags flags, Type delegateType, params DelegateSwizzle[] fallbackSwizzles) where T : Delegate {
+
+    public static T CreateMethodDelegate<T>(this Type type, string methodName, BindingFlags flags, Type delegateType, params DelegateSwizzle[] fallbackSwizzles) where T : Delegate {
       try {
-        delegateType ??= typeof(T);
-        
-        
         var method = GetMethodOrThrow(type, methodName, flags, delegateType, fallbackSwizzles, out var swizzle);
-        if (swizzle == null && typeof(T) == delegateType) {
-          return (T)Delegate.CreateDelegate(typeof(T), method);
-        }
 
         var delegateParameters = typeof(T).GetMethod("Invoke").GetParameters();
         var parameters         = new List<ParameterExpression>();
@@ -5485,13 +5384,13 @@ namespace Fusion.Editor {
               convertedParameters.Add(Expression.Convert(parameters[j], methodParameters[i].ParameterType));
             }
           } else {
-            foreach (var converter in swizzle.Converters) {
-              convertedParameters.Add(Expression.Invoke(converter, parameters));
+            var swizzledParameters = swizzle.Swizzle(parameters.ToArray());
+            for (int i = 0, j = method.IsStatic ? 0 : 1; i < methodParameters.Length; ++i, ++j) {
+              convertedParameters.Add(Expression.Convert(swizzledParameters[j], methodParameters[i].ParameterType));
             }
           }
         }
-        
-        
+
         MethodCallExpression callExpression;
         if (method.IsStatic) {
           callExpression = Expression.Call(method, convertedParameters);
@@ -5507,7 +5406,42 @@ namespace Fusion.Editor {
         throw new InvalidOperationException(CreateMethodExceptionMessage<T>(type.Assembly, type.FullName, methodName, flags), ex);
       }
     }
-    
+
+    public static T CreateConstructorDelegate<T>(this Type type, BindingFlags flags, Type delegateType, params DelegateSwizzle[] fallbackSwizzles) where T : Delegate {
+      try {
+        var constructor = GetConstructorOrThrow(type, flags, delegateType, fallbackSwizzles, out var swizzle);
+
+        var delegateParameters = typeof(T).GetMethod("Invoke").GetParameters();
+        var parameters         = new List<ParameterExpression>();
+
+        for (var i = 0; i < delegateParameters.Length; ++i) {
+          parameters.Add(Expression.Parameter(delegateParameters[i].ParameterType, $"param_{i}"));
+        }
+
+        var convertedParameters = new List<Expression>();
+        {
+          var constructorParameters = constructor.GetParameters();
+          if (swizzle == null) {
+            for (int i = 0, j = 0; i < constructorParameters.Length; ++i, ++j) {
+              convertedParameters.Add(Expression.Convert(parameters[j], constructorParameters[i].ParameterType));
+            }
+          } else {
+            var swizzledParameters = swizzle.Swizzle(parameters.ToArray());
+            for (int i = 0, j = 0; i < constructorParameters.Length; ++i, ++j) {
+              convertedParameters.Add(Expression.Convert(swizzledParameters[j], constructorParameters[i].ParameterType));
+            }
+          }
+        }
+
+        var newExpression = Expression.New(constructor, convertedParameters);
+        var l             = Expression.Lambda(typeof(T), newExpression, parameters);
+        var del           = l.Compile();
+        return (T)del;
+      } catch (Exception ex) {
+        throw new InvalidOperationException(CreateConstructorExceptionMessage(type.Assembly, type.FullName, flags), ex);
+      }
+    }
+
     /// <summary>
     ///   Returns the first found member of the given name. Includes private members.
     /// </summary>
@@ -5620,15 +5554,6 @@ namespace Fusion.Editor {
       }
 
       return property;
-    }
-    
-    public static MethodInfo GetMethodOrThrow(this Type type, string methodName, BindingFlags flags = DefaultBindingFlags) {
-      var method = type.GetMethod(methodName, flags);
-      if (method == null) {
-        throw new ArgumentOutOfRangeException(nameof(methodName), CreateFieldExceptionMessage(type.Assembly, type.FullName, methodName, flags));
-      }
-
-      return method;
     }
 
     public static ConstructorInfo GetConstructorInfoOrThrow(this Type type, Type[] types, BindingFlags flags = DefaultBindingFlags) {
@@ -5778,7 +5703,7 @@ namespace Fusion.Editor {
 
       if (swizzles != null) {
         foreach (var swizzle in swizzles) {
-          var swizzled = swizzle.Types;
+          var swizzled = swizzle.Swizzle(allDelegateParameters);
           constructor = type.GetConstructor(flags, null, swizzled, null);
           if (constructor != null) {
             firstMatchingSwizzle = swizzle;
@@ -5808,7 +5733,7 @@ namespace Fusion.Editor {
 
       if (swizzles != null) {
         foreach (var swizzle in swizzles) {
-          var swizzled = swizzle.Types;
+          var swizzled = swizzle.Swizzle(allDelegateParameters);
           if (!flags.HasFlag(BindingFlags.Static) && swizzled[0] != type) {
             throw new InvalidOperationException();
           }
@@ -5999,33 +5924,29 @@ namespace Fusion.Editor {
       public Action<TValue> SetValue;
     }
 
-    internal static class DelegateSwizzle<In0, In1> {
-      public static DelegateSwizzle Make<Out0>(Expression<Func<In0, In1, Out0>> out0) {
-        return new DelegateSwizzle(new Expression[] { out0 }, new [] { typeof(Out0)});
-      }
-      
-      public static DelegateSwizzle Make<Out0, Out1>(Expression<Func<In0, In1, Out0>> out0, Expression<Func<In0, In1, Out1>> out1) {
-        return new DelegateSwizzle(new Expression[] { out0, out1 }, new [] { typeof(Out0), typeof(Out1)});
-      }
-      
-      public static DelegateSwizzle Make<Out0, Out1, Out3>(Expression<Func<In0, In1, Out0>> out0, Expression<Func<In0, In1, Out1>> out1, Expression<Func<In0, In1, Out3>> out3) {
-        return new DelegateSwizzle(new Expression[] { out0, out1, out3 }, new [] { typeof(Out0), typeof(Out1), typeof(Out3)});
-      }
-    }
+    public class DelegateSwizzle {
+      private readonly int[] _args;
 
-    internal class DelegateSwizzle {
-      public DelegateSwizzle(Expression[] converters, Type[] types) {
-        Converters = converters;
-        Types = types;
+      public DelegateSwizzle(params int[] args) {
+        _args = args;
       }
 
-      public Expression[] Converters { get; }
-      public Type[] Types { get; }
+      public int Count => _args.Length;
+
+      public T[] Swizzle<T>(T[] inputTypes) {
+        var result = new T[_args.Length];
+
+        for (var i = 0; i < _args.Length; ++i) {
+          result[i] = inputTypes[_args[i]];
+        }
+
+        return result;
+      }
     }
 
 #if UNITY_EDITOR
-    
-    public static T CreateEditorMethodDelegate<T>(string editorAssemblyTypeName, string methodName, BindingFlags flags) where T : Delegate {
+
+    public static T CreateEditorMethodDelegate<T>(string editorAssemblyTypeName, string methodName, BindingFlags flags = DefaultBindingFlags) where T : Delegate {
       return CreateMethodDelegate<T>(typeof(Editor).Assembly, editorAssemblyTypeName, methodName, flags);
     }
 
@@ -6385,13 +6306,10 @@ namespace Fusion.Editor {
 
 #region UnityInternal.cs
 
-// ReSharper disable InconsistentNaming
-#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
 namespace Fusion.Editor {
   using System;
   using System.Collections;
   using System.Collections.Generic;
-  using System.Linq;
   using System.Reflection;
   using UnityEditor;
   using UnityEngine;
@@ -6399,17 +6317,6 @@ namespace Fusion.Editor {
 
 
   static partial class UnityInternal {
-    
-    static Assembly FindAssembly(string name) {
-      return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == name);
-    }
-    
-    [UnityEditor.InitializeOnLoad]
-    public static class Event {
-      static readonly StaticAccessor<UnityEngine.Event> s_Current_ = typeof(UnityEngine.Event).CreateStaticFieldAccessor<UnityEngine.Event>(nameof(s_Current));
-      public static UnityEngine.Event s_Current => s_Current_.GetValue();
-    }
-    
     [UnityEditor.InitializeOnLoad]
     public static class Editor {
       public delegate bool DoDrawDefaultInspectorDelegate(SerializedObject obj);
@@ -6460,55 +6367,36 @@ namespace Fusion.Editor {
 
     [UnityEditor.InitializeOnLoad]
     public static class LayerMatrixGUI {
-      private const string TypeName =
-#if UNITY_2023_1_OR_NEWER
-        "UnityEditor.LayerCollisionMatrixGUI2D";
-#else
-        "UnityEditor.LayerMatrixGUI";
-#endif
 
-      private static readonly Type InternalType =
+      private static readonly Type InternalType = 
 #if UNITY_2023_1_OR_NEWER
-        FindAssembly("UnityEditor.Physics2DModule")?.GetType(TypeName, true);
+        Assembly.Load("UnityEditor.PhysicsModule").GetType("UnityEditor.LayerMatrixGUI", true);
 #else 
-        typeof(UnityEditor.Editor).Assembly.GetType(TypeName, true);
+        typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.LayerMatrixGUI", true);
 #endif
       
-      private static readonly Type InternalGetValueFuncType = InternalType?.GetNestedTypeOrThrow(nameof(GetValueFunc), BindingFlags.Public);
-      private static readonly Type InternalSetValueFuncType = InternalType?.GetNestedTypeOrThrow(nameof(SetValueFunc), BindingFlags.Public);
+      private static readonly Type InternalGetValueFuncType = InternalType.GetNestedTypeOrThrow(nameof(GetValueFunc), BindingFlags.Public);
+      private static readonly Type InternalSetValueFuncType = InternalType.GetNestedTypeOrThrow(nameof(SetValueFunc), BindingFlags.Public);
       
-#if UNITY_2023_1_OR_NEWER
-      private static readonly Delegate _Draw = InternalType?.CreateMethodDelegate(nameof(Draw), BindingFlags.Public | BindingFlags.Static, 
-        typeof(Action<,,>).MakeGenericType(
-          typeof(GUIContent), InternalGetValueFuncType, InternalSetValueFuncType)
-      );
-#else 
-      private delegate void Ref2Action<T1, T2, T3, T4>(T1 t1, ref T2 t2, T3 t3, T4 t4);
-
-      private static readonly Delegate _DoGUI = InternalType?.CreateMethodDelegate("DoGUI", BindingFlags.Public | BindingFlags.Static,
+      private static readonly Delegate _doGUI = InternalType.CreateMethodDelegate(nameof(DoGUI), BindingFlags.Public | BindingFlags.Static,
         typeof(Ref2Action<,,,>).MakeGenericType(
           typeof(GUIContent), typeof(bool), InternalGetValueFuncType, InternalSetValueFuncType)
       );
-#endif
-      
+
+      private delegate void Ref2Action<T1, T2, T3, T4>(T1 t1, ref T2 t2, T3 t3, T4 t4);
+
       public delegate bool GetValueFunc(int layerA, int layerB);
+
       public delegate void SetValueFunc(int layerA, int layerB, bool val);
 
-      public static void Draw(GUIContent label, GetValueFunc getValue, SetValueFunc setValue) {
-        if (InternalType == null) {
-          throw new InvalidOperationException($"{TypeName} not found");
-        }
-        
+      public static void DoGUI(string title, ref bool show, GetValueFunc getValue, SetValueFunc setValue) {
         var getter = Delegate.CreateDelegate(InternalGetValueFuncType, getValue.Target, getValue.Method);
         var setter = Delegate.CreateDelegate(InternalSetValueFuncType, setValue.Target, setValue.Method);
-        
-#if UNITY_2023_1_OR_NEWER
-        _Draw.DynamicInvoke(label, getter, setter);
-#else
-        bool show = true;
-        var args = new object[] { label, show, getter, setter };
-        _DoGUI.DynamicInvoke(args);
-#endif
+
+        var args = new object[] { title, show, getter, setter };
+        args[0] = new GUIContent(title);
+        _doGUI.DynamicInvoke(args);
+        show = (bool)args[1];
       }
     }
 
@@ -6557,36 +6445,30 @@ namespace Fusion.Editor {
 
     [UnityEditor.InitializeOnLoad]
     public static class ScriptAttributeUtility {
-      
-      public static readonly Type InternalType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.ScriptAttributeUtility", true);
-      
+      public delegate Type GetDrawerTypeForTypeDelegate(Type type);
+
+      public delegate List<PropertyAttribute> GetFieldAttributesDelegate(FieldInfo field);
+
       public delegate FieldInfo GetFieldInfoFromPropertyDelegate(SerializedProperty property, out Type type);
+
+      public static readonly Type InternalType = typeof(UnityEditor.Editor).Assembly.GetType("UnityEditor.ScriptAttributeUtility", true);
+
       public static readonly GetFieldInfoFromPropertyDelegate GetFieldInfoFromProperty =
-        InternalType.CreateMethodDelegate<GetFieldInfoFromPropertyDelegate>(
+        CreateEditorMethodDelegate<GetFieldInfoFromPropertyDelegate>(
+          "UnityEditor.ScriptAttributeUtility",
           "GetFieldInfoFromProperty",
           BindingFlags.Static | BindingFlags.NonPublic);
-      
-      public delegate Type GetDrawerTypeForTypeDelegate(Type type, bool isManagedReference);
+
       public static readonly GetDrawerTypeForTypeDelegate GetDrawerTypeForType =
-        InternalType.CreateMethodDelegate<GetDrawerTypeForTypeDelegate>(
+        CreateEditorMethodDelegate<GetDrawerTypeForTypeDelegate>(
+          "UnityEditor.ScriptAttributeUtility",
           "GetDrawerTypeForType",
-          BindingFlags.Static | BindingFlags.NonPublic,
-          null,
-          DelegateSwizzle<Type, bool>.Make((t, b) => t), // post 2023.3
-          DelegateSwizzle<Type, bool>.Make((t, b) => t, (t, b) => (Type[])null, (t, b) => b) // pre 2023.3.23
-        );
-      
-      public delegate Type GetDrawerTypeForPropertyAndTypeDelegate(SerializedProperty property, Type type);
-      public static readonly GetDrawerTypeForPropertyAndTypeDelegate GetDrawerTypeForPropertyAndType = 
-        InternalType.CreateMethodDelegate<GetDrawerTypeForPropertyAndTypeDelegate>(
-          "GetDrawerTypeForPropertyAndType",
           BindingFlags.Static | BindingFlags.NonPublic);
 
       private static readonly GetHandlerDelegate _GetHandler = InternalType.CreateMethodDelegate<GetHandlerDelegate>("GetHandler", BindingFlags.NonPublic | BindingFlags.Static,
         MakeFuncType(typeof(SerializedProperty), PropertyHandler.InternalType)
       );
 
-      public delegate List<PropertyAttribute> GetFieldAttributesDelegate(FieldInfo field);
       public static readonly GetFieldAttributesDelegate GetFieldAttributes = InternalType.CreateMethodDelegate<GetFieldAttributesDelegate>(nameof(GetFieldAttributes));
 
       private static readonly StaticAccessor<object> _propertyHandlerCache = InternalType.CreateStaticPropertyAccessor(nameof(propertyHandlerCache), PropertyHandlerCache.InternalType);
@@ -6859,8 +6741,6 @@ namespace Fusion.Editor {
     public static InternalStyles Styles => InternalStyles.Instance;
   }
 }
-#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
-// ReSharper enable InconsistentNaming
 
 #endregion
 
@@ -6948,7 +6828,7 @@ namespace Fusion.Editor {
       All        = Predefined | InPackages | InAssets | Editor | Runtime,
     }
 
-    Dictionary<string, AssemblyInfo> _allAssemblies;
+    HashSet<string> _allAssemblies;
 
     protected override void OnGUIInternal(Rect position, SerializedProperty property, GUIContent label) {
       var  assemblyName = property.stringValue;
@@ -6956,18 +6836,12 @@ namespace Fusion.Editor {
       
       if (!string.IsNullOrEmpty(assemblyName)) {
         if (_allAssemblies == null) {
-          _allAssemblies = GetAssemblies(AsmDefType.All).ToDictionary(x => x.Name, x => x);
+          _allAssemblies = new HashSet<string>(GetAssemblies(AsmDefType.All), StringComparer.OrdinalIgnoreCase);
         }
 
-        if (!_allAssemblies.TryGetValue(assemblyName, out var assemblyInfo)) {
+        if (!_allAssemblies.Contains(assemblyName, StringComparer.OrdinalIgnoreCase)) {
           SetInfo($"Assembly not found: {assemblyName}");
           notFound = true;
-        } else if (((AssemblyNameAttribute)attribute).RequiresUnsafeCode && !assemblyInfo.AllowUnsafeCode) {
-          if (assemblyInfo.IsPredefined) {
-            SetError($"Predefined assemblies need 'Allow Unsafe Code' enabled in Player Settings");
-          } else {
-            SetError($"Assembly does not allow unsafe code");
-          }
         }
       }
 
@@ -7006,14 +6880,14 @@ namespace Fusion.Editor {
               menu.AddSeparator(prefix);
             }
 
-            foreach (var asm in GetAssemblies(flag | AsmDefType.InPackages)) {
-              menu.AddItem(new GUIContent($"{prefix}Packages/{asm.Name}"), string.Equals(asm.Name, assemblyName, StringComparison.OrdinalIgnoreCase), onClicked, asm.Name);
+            foreach (var name in GetAssemblies(flag | AsmDefType.InPackages)) {
+              menu.AddItem(new GUIContent($"{prefix}Packages/{name}"), string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase), onClicked, name);
             }
 
             menu.AddSeparator(prefix);
 
-            foreach (var asm in GetAssemblies(flag | AsmDefType.InAssets | AsmDefType.Predefined)) {
-              menu.AddItem(new GUIContent($"{prefix}{asm.Name}"), string.Equals(asm.Name, assemblyName, StringComparison.OrdinalIgnoreCase), onClicked, asm.Name);
+            foreach (var name in GetAssemblies(flag | AsmDefType.InAssets | AsmDefType.Predefined)) {
+              menu.AddItem(new GUIContent($"{prefix}{name}"), string.Equals(name, assemblyName, StringComparison.OrdinalIgnoreCase), onClicked, name);
             }
           }
 
@@ -7028,68 +6902,61 @@ namespace Fusion.Editor {
       }
     }
 
-    static IEnumerable<AssemblyInfo> GetAssemblies(AsmDefType types) {
-      var result = new Dictionary<string, AsmDefData>(StringComparer.OrdinalIgnoreCase);
+    static IEnumerable<string> GetAssemblies(AsmDefType types) {
+      IEnumerable<string> query = Enumerable.Empty<string>();
 
       if (types.HasFlag(AsmDefType.Predefined)) {
         if (types.HasFlag(AsmDefType.Runtime)) {
-          yield return new AssemblyInfo("Assembly-CSharp-firstpass", PlayerSettings.allowUnsafeCode, true);
-          yield return new AssemblyInfo("Assembly-CSharp", PlayerSettings.allowUnsafeCode, true);
+          query = query.Concat(new[] {
+            "Assembly-CSharp-firstpass",
+            "Assembly-CSharp"
+          });
         }
 
         if (types.HasFlag(AsmDefType.Editor)) {
-          yield return new AssemblyInfo("Assembly-CSharp-Editor-firstpass", PlayerSettings.allowUnsafeCode, true);
-          yield return new AssemblyInfo("Assembly-CSharp-Editor", PlayerSettings.allowUnsafeCode, true);
+          query = query.Concat(new[] {
+            "Assembly-CSharp-Editor-firstpass",
+            "Assembly-CSharp-Editor"
+          });
         }
       }
 
       if (types.HasFlag(AsmDefType.InAssets) || types.HasFlag(AsmDefType.InPackages)) {
-        var query = AssetDatabase.FindAssets("t:asmdef")
-         .Select(x => AssetDatabase.GUIDToAssetPath(x))
-         .Where(x => {
-            if (types.HasFlag(AsmDefType.InAssets) && x.StartsWith("Assets/")) {
-              return true;
-            } else if (types.HasFlag(AsmDefType.InPackages) && x.StartsWith("Packages/")) {
-              return true;
-            } else {
-              return false;
-            }
-         })
-         .Select(x => JsonUtility.FromJson<AsmDefData>(File.ReadAllText(x)))
-         .Where(x => {
-           bool editorOnly = x.includePlatforms.Length == 1 && x.includePlatforms[0] == "Editor";
-           if (types.HasFlag(AsmDefType.Runtime) && !editorOnly) {
-             return true;
-           } else if (types.HasFlag(AsmDefType.Editor) && editorOnly) {
-             return true;
-           } else {
-             return false;
-           }
-         });
-        
-        foreach (var asmdef in query) {
-          yield return new AssemblyInfo(asmdef.name, asmdef.allowUnsafeCode, false);
-        }
+        query = query.Concat(
+          AssetDatabase.FindAssets("t:asmdef")
+           .Select(x => AssetDatabase.GUIDToAssetPath(x))
+           .Where(x => {
+              if (types.HasFlag(AsmDefType.InAssets) && x.StartsWith("Assets/")) {
+                return true;
+              } else if (types.HasFlag(AsmDefType.InPackages) && x.StartsWith("Packages/")) {
+                return true;
+              } else {
+                return false;
+              }
+            })
+           .Select(x => JsonUtility.FromJson<AsmDefData>(File.ReadAllText(x)))
+           .Where(x => {
+              bool editorOnly = x.includePlatforms.Length == 1 && x.includePlatforms[0] == "Editor";
+              if (types.HasFlag(AsmDefType.Runtime) && !editorOnly) {
+                return true;
+              } else if (types.HasFlag(AsmDefType.Editor) && editorOnly) {
+                return true;
+              } else {
+                return false;
+              }
+            })
+           .Select(x => x.name)
+           .Distinct()
+        );
       }
+
+      return query;
     }
 
     [Serializable]
     private class AsmDefData {
       public string[] includePlatforms = Array.Empty<string>();
       public string   name             = string.Empty;
-      public bool     allowUnsafeCode;
-    }
-    
-    private struct AssemblyInfo {
-      public string Name;
-      public bool   AllowUnsafeCode;
-      public bool   IsPredefined;
-      
-      public AssemblyInfo(string name, bool allowUnsafeCode, bool isPredefined) {
-        Name           = name;
-        AllowUnsafeCode = allowUnsafeCode;
-        IsPredefined   = isPredefined;
-      }
     }
   }
 }
@@ -7371,7 +7238,7 @@ namespace Fusion.Editor {
         for (var i = 0; i < fieldAttributes.Count; ++i) {
           var fieldAttribute = fieldAttributes[i];
 
-          var attributeDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForPropertyAndType(property, fieldAttribute.GetType());
+          var attributeDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(fieldAttribute.GetType());
           if (attributeDrawerType == null) {
             TraceField($"No drawer for {attributeDrawerType}");
             continue;
@@ -7393,9 +7260,10 @@ namespace Fusion.Editor {
 
           FusionEditorLog.Assert(attributeDrawerType.IsSubclassOf(typeof(PropertyDrawer)));
 
-          if (!foundSelf && fieldAttribute.Equals(attribute)) {
+          if (fieldAttribute.Equals(attribute)) {
             // self
             PropertyDrawers.Add(this);
+            FusionEditorLog.Assert(foundSelf == false);
             foundSelf    = true;
             isLastDrawer = true;
             TraceField($"Found self at {i} ({this})");
@@ -7418,7 +7286,7 @@ namespace Fusion.Editor {
           fieldType = fieldType.GetUnityLeafType();
         }
         
-        var typeDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForPropertyAndType(property, fieldType);
+        var typeDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(fieldType);
         if (typeDrawerType != null) {
           var drawer = (PropertyDrawer)Activator.CreateInstance(typeDrawerType);
           UnityInternal.PropertyDrawer.SetFieldInfo(drawer, fieldInfo);
@@ -8414,15 +8282,17 @@ namespace Fusion.Editor {
       private const int margin       = 30;
       private const int MaxLayers    = 32;
 
-      private readonly GUIContent _label;
-      private readonly int _numLayers;
-      private readonly float _labelWidth;
+      private readonly string _name;
+      private readonly int    _numLayers;
+      private readonly float  _labelWidth;
       
       private readonly UnityInternal.LayerMatrixGUI.GetValueFunc _getter;
       private readonly UnityInternal.LayerMatrixGUI.SetValueFunc _setter;
       
-      public LayerMatrixPopup(string label, UnityInternal.LayerMatrixGUI.GetValueFunc getter, UnityInternal.LayerMatrixGUI.SetValueFunc setter) {
-        _label      = new GUIContent(label);
+      private bool  _show = true;
+      
+      public LayerMatrixPopup(string name, UnityInternal.LayerMatrixGUI.GetValueFunc getter, UnityInternal.LayerMatrixGUI.SetValueFunc setter) {
+        _name       = name;
         _getter     = getter;
         _setter     = setter;
         _labelWidth = 110;
@@ -8441,7 +8311,8 @@ namespace Fusion.Editor {
       public override void OnGUI(Rect rect) {
         GUILayout.BeginArea(rect);
         
-        UnityInternal.LayerMatrixGUI.Draw(_label, _getter, _setter);
+        UnityInternal.LayerMatrixGUI.DoGUI(_name, ref _show, _getter, _setter);
+        _show = true;
 
         GUILayout.EndArea();
       }
@@ -9708,12 +9579,16 @@ namespace Fusion.Editor {
 
 #if ODIN_INSPECTOR && !FUSION_ODIN_DISABLED
 namespace Fusion.Editor {
-  using Sirenix.OdinInspector;
+  using System;
+  using System.Reflection;
+  using Sirenix.OdinInspector.Editor;
+  using UnityEditor;
+  using UnityEngine;
 
   partial class BinaryDataAttributeDrawer {
     [FusionOdinAttributeConverter]
     static System.Attribute[] ConvertToOdinAttributes(System.Reflection.MemberInfo memberInfo, BinaryDataAttribute attribute) {
-      return new[] { new DrawWithUnityAttribute() };
+      return Array.Empty<System.Attribute>();
     }
   }
 }
@@ -9922,10 +9797,6 @@ namespace Fusion.Editor {
     }
 
     class OdinDrawer : OdinAttributeDrawer<OdinAttributeProxy> {
-      protected override bool CanDrawAttributeProperty(InspectorProperty property) {
-        return !property.IsArrayElement(out _);
-      }
-
       protected override void DrawPropertyLayout(GUIContent label) {
         CallNextDrawer(label);
 
@@ -10362,8 +10233,8 @@ namespace Fusion.Editor {
         }
       }
 
-      
-      var propertyDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(property.ValueEntry.TypeOfValue, false);
+
+      var propertyDrawerType = UnityInternal.ScriptAttributeUtility.GetDrawerTypeForType(property.ValueEntry.TypeOfValue);
 
       if (propertyDrawerType != null) {
         var meta = propertyDrawerType.GetCustomAttribute<FusionPropertyDrawerMetaAttribute>();
@@ -10691,12 +10562,12 @@ namespace Fusion.Editor {
         var prefab = (GameObject)EditorUtility.InstanceIDToObject(context.InstanceID);
 
         result = new TSource() {
-          Object = prefab.GetComponent<TAsset>()
+          Prefab = prefab.GetComponent<TAsset>()
         };
         
       } else {
         result = new TSource() {
-          Object = new(context.InstanceID)
+          Prefab = new(context.InstanceID)
         };
       }
       return true;
@@ -10706,6 +10577,35 @@ namespace Fusion.Editor {
 
 #endregion
 
+
+
+#endregion
+
+
+#region Assets/Photon/Fusion/Editor/FusionEditorConfigImporter.cs
+
+namespace Fusion.Editor {
+  using System.IO;
+  using UnityEditor.AssetImporters;
+  using UnityEngine;
+
+  [ScriptedImporter(0, "editorconfig")]
+  public class FusionEditorConfigImporter : ScriptedImporter {
+    public override void OnImportAsset(AssetImportContext ctx) {
+      var path      = ctx.assetPath;
+      var contents  = File.ReadAllText(path);
+      
+      // create internal text asset for convenience
+      var mainAsset = new TextAsset(contents);
+      ctx.AddObjectToAsset("main", mainAsset);
+      ctx.SetMainObject(mainAsset);
+
+      // write the actual editorconfig for editors to consume
+      var editorConfigPath = Path.Combine(Path.GetDirectoryName(path), ".editorconfig");
+      File.WriteAllText(editorConfigPath, contents);
+    }
+  }
+}
 
 
 #endregion
@@ -11333,6 +11233,72 @@ namespace Fusion.Editor {
     public SerializedProperty SurrogateProperty;
     [NonSerialized]
     public Type SurrogateType;
+  }
+}
+
+#endregion
+
+
+#region Assets/Photon/Fusion/Editor/FusionWeaverTriggerImporter.cs
+
+namespace Fusion.Editor {
+  using System.IO;
+  using System.Linq;
+  using UnityEditor;
+  using UnityEditor.AssetImporters;
+  using UnityEngine;
+
+  [ScriptedImporter(1, ExtensionWithoutDot, NetworkProjectConfigImporter.ImportQueueOffset + 1)]
+  public class FusionWeaverTriggerImporter : ScriptedImporter {
+    public const string DependencyName = "FusionILWeaverTriggerImporter/ConfigHash";
+    public const string Extension = "." + ExtensionWithoutDot;
+    public const string ExtensionWithoutDot = "fusionweavertrigger";
+
+    public override void OnImportAsset(AssetImportContext ctx) {
+      ctx.DependsOnCustomDependency(DependencyName);
+      ILWeaverUtils.RunWeaver();
+    }
+
+    private static void RefreshDependencyHash() {
+      if (EditorApplication.isCompiling || EditorApplication.isUpdating) {
+        return;
+      }
+      
+      var configPath = NetworkProjectConfigUtilities.GetGlobalConfigPath();
+      if (string.IsNullOrEmpty(configPath)) {
+        return;
+      }
+
+      try {
+        var cfg = NetworkProjectConfigImporter.LoadConfigFromFile(configPath);
+        var hash = new Hash128();
+
+        foreach (var path in cfg.AssembliesToWeave) {
+          hash.Append(path);
+        }
+
+        hash.Append(cfg.UseSerializableDictionary ? 1 : 0);
+        hash.Append(cfg.NullChecksForNetworkedProperties ? 1 : 0);
+        hash.Append(cfg.CheckRpcAttributeUsage ? 1 : 0);
+        hash.Append(cfg.CheckNetworkedPropertiesBeingEmpty ? 1 : 0);
+
+        AssetDatabase.RegisterCustomDependency(DependencyName, hash);
+        AssetDatabase.Refresh();
+      } catch {
+        // ignore the error
+      }
+    }
+
+    private class Postprocessor : AssetPostprocessor {
+      private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths) {
+        foreach (var path in importedAssets) {
+          if (path.EndsWith(NetworkProjectConfigImporter.Extension)) {
+            EditorApplication.delayCall -= RefreshDependencyHash;
+            EditorApplication.delayCall += RefreshDependencyHash;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -12214,6 +12180,310 @@ namespace Fusion.Editor {
 #endregion
 
 
+#region Assets/Photon/Fusion/Editor/NetworkPrefabsInspector.cs
+
+namespace Fusion.Editor {
+  using System;
+  using System.Collections.Generic;
+  using System.Linq;
+  using UnityEditor;
+  using UnityEditor.IMGUI.Controls;
+  using UnityEngine;
+  using Object = UnityEngine.Object;
+
+  public class NetworkPrefabsInspector : EditorWindow {
+
+    private Grid _grid = new Grid();
+    
+    [MenuItem("Tools/Fusion/Windows/Network Prefabs Inspector")]
+    [MenuItem("Window/Fusion/Network Prefabs Inspector")]
+    public static void ShowWindow() {
+      var window = GetWindow<NetworkPrefabsInspector>(false, "Network Prefabs Inspector");
+      window.Show();
+    }
+    
+    private void OnEnable() {
+      _grid.PrefabTable = NetworkProjectConfig.Global.PrefabTable;
+      _grid.OnEnable();
+    }
+
+    private void OnInspectorUpdate() {
+      _grid.OnInspectorUpdate();
+    }
+
+    private void OnGUI() {
+      using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar)) {
+        _grid.DrawToolbarReloadButton();
+        _grid.DrawToolbarSyncSelectionButton();
+        GUILayout.FlexibleSpace();
+        
+        EditorGUI.BeginChangeCheck();
+        _grid.OnlyLoaded = GUILayout.Toggle(_grid.OnlyLoaded, "Loaded Only", EditorStyles.toolbarButton);
+        if (EditorGUI.EndChangeCheck()) {
+          _grid.ResetTree();
+        }
+
+        _grid.DrawToolbarSearchField();
+      }
+
+      var rect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true));
+      _grid.OnGUI(rect);
+    }
+    
+
+    private enum LoadState {
+      NotLoaded,
+      Loading,
+      LoadedNoInstances,
+      Loaded
+    }
+
+    [Serializable]
+    private class InspectorTreeViewState : TreeViewState {
+      public MultiColumnHeaderState HeaderState;
+      public bool                   SyncSelection;
+    }
+
+    private class GridItem : FusionGridItem {
+      private readonly NetworkPrefabId    _prefabId;
+      private readonly NetworkPrefabTable _prefabTable;
+
+      public GridItem(NetworkPrefabTable prefabTable, NetworkPrefabId prefabId) {
+        _prefabId = prefabId;
+        _prefabTable = prefabTable;
+      }
+      
+      public int InstanceCount => _prefabTable.GetInstancesCount(_prefabId);
+
+      public string Path => AssetDatabase.GUIDToAssetPath(Guid);
+
+      public string Guid => Source?.AssetGuid.ToUnityGuidString() ?? "Null";
+
+      public override Object TargetObject {
+        get {
+          if (Source?.AssetGuid.IsValid == true) {
+            if (NetworkProjectConfigUtilities.TryGetPrefabEditorInstance(Source.AssetGuid, out var result)) {
+              return result.gameObject;
+            }
+          }
+
+          return null;
+        }
+      }
+
+      public INetworkPrefabSource Source => _prefabTable.GetSource(_prefabId);
+
+      public string Description {
+        get => Source?.Description ?? "Null";
+      }
+
+      public LoadState LoadState {
+        get {
+          if (!_prefabTable.IsAcquired(_prefabId)) {
+            return LoadState.NotLoaded;
+          }
+
+          if (!_prefabTable.GetSource(_prefabId).IsCompleted) {
+            return LoadState.Loading;
+          }
+          
+          if (_prefabTable.GetInstancesCount(_prefabId) == 0) {
+            return LoadState.LoadedNoInstances;
+          }
+
+          return LoadState.Loaded;
+        }
+      }
+
+      public NetworkPrefabId PrefabId => _prefabId;
+    }
+
+    [Serializable]
+    class Grid : FusionGrid<GridItem> {
+
+      [SerializeField]
+      public NetworkPrefabTable PrefabTable;
+      [SerializeField]
+      public bool OnlyLoaded;
+
+      public override int GetContentHash() {
+        return PrefabTable?.Version ?? 0;
+      }
+
+      protected override IEnumerable<Column> CreateColumns() {
+        yield return new() {
+          headerContent = new GUIContent("State"),
+          width = 40,
+          autoResize = false,
+          cellGUI = (item, rect, _, _) => {
+            var icon = FusionEditorSkin.LoadStateIcon;
+            string label = "";
+            Color color;
+            switch (item.LoadState) {
+              case LoadState.Loaded:
+                color = Color.green;
+                label = item.InstanceCount.ToString();
+                break;
+              case LoadState.LoadedNoInstances:
+                color = Color.yellow;
+                label = "0";
+                break;
+              case LoadState.Loading:
+                color = Color.yellow;
+                color.a = 0.5f;
+                label = "0";
+                break;
+              default:
+                color = Color.gray;
+                break;
+            }
+
+            using (new FusionEditorGUI.ContentColorScope(color)) {
+              EditorGUI.LabelField(rect, new GUIContent(label, icon, item.LoadState.ToString()));
+            }
+          },
+          getComparer = order => (a, b) => {
+            var result = a.LoadState.CompareTo(b.LoadState) * order;
+            if (result != 0) {
+              return result;
+            }
+            return a.InstanceCount.CompareTo(b.InstanceCount) * order;
+          },
+        };
+        yield return new() {
+          headerContent = new GUIContent("Type"),
+          width = 40,
+          maxWidth = 40,
+          minWidth = 40,
+          cellGUI = (item, rect, _, _) => INetworkPrefabSourceDrawer.DrawThumbnail(rect, item.Source),
+          getComparer = order => (a, b) => EditorUtility.NaturalCompare(a.Source?.GetType().Name ?? "", b.Source?.GetType().Name ?? "") * order,
+        };
+        yield return MakeSimpleColumn(x => x.PrefabId, new() {
+          cellGUI = (item, rect, selected, focused) => TreeView.DefaultGUI.Label(rect, item.PrefabId.ToString(false, false), selected , focused),
+          width = 50,
+          autoResize = false
+        });
+        yield return MakeSimpleColumn(x => x.Path, new() {
+          initiallySorted = true,
+        });
+        yield return MakeSimpleColumn(x => x.Guid, new() {
+          initiallyVisible = false
+        });
+        yield return MakeSimpleColumn(x => x.Description, new() {
+          initiallyVisible = false
+        });
+      }
+
+      protected override IEnumerable<GridItem> CreateRows() {
+        if (PrefabTable == null) {
+          yield break;
+        }
+
+        for (int i = 0; i < PrefabTable.Prefabs.Count; ++i) {
+          var prefabId = NetworkPrefabId.FromIndex(i);
+          if (OnlyLoaded && !PrefabTable.IsAcquired(prefabId)) {
+            continue;
+          }
+          yield return new GridItem(PrefabTable, NetworkPrefabId.FromIndex(i)) { id = (int)(i + 1) };
+        }
+      }
+
+      protected override GenericMenu CreateContextMenu(GridItem item, TreeView treeView) {
+        
+        var menu = new GenericMenu();
+
+        var selection = treeView.GetSelection()
+         .Select(x => NetworkPrefabId.FromIndex(x-1))
+         .ToList();
+
+        var anyLoaded = selection.Any(x => PrefabTable.IsAcquired(x));
+        var anyNotLoaded = selection.Any(x => !PrefabTable.IsAcquired(x));
+        var anyInstances = selection.Any(x => PrefabTable.GetInstancesCount(x) > 0);
+        var spawnerRunners = NetworkRunner.Instances.Where(x => x && x.IsRunning && x.CanSpawn).ToArray();
+        
+        var loadContent = new GUIContent("Load");
+        var loadAsyncContent = new GUIContent("Load (async)");
+        var unloadContent = new GUIContent("Unload");
+        var selectInstancesContent = new GUIContent("Select Instances");
+        var spawnContent = new GUIContent("Spawn");
+        var spawnAsyncContent = new GUIContent("Spawn (async)");
+
+        if (anyNotLoaded) {
+          menu.AddItem(loadContent, false, () => {
+            foreach (var id in selection) {
+              PrefabTable.Load(id, isSynchronous: true);
+            }
+          });
+          menu.AddItem(loadAsyncContent, false, () => {
+            foreach (var id in selection) {
+              PrefabTable.Load(id, isSynchronous: false);
+            }
+          });
+        } else {
+          menu.AddDisabledItem(loadContent);
+          menu.AddDisabledItem(loadAsyncContent);
+        }
+        
+        if (anyLoaded) {
+          menu.AddItem(unloadContent, false, () => {
+            foreach (var id in selection) {
+              PrefabTable.Unload(id);
+            }
+          });
+        } else {
+          menu.AddDisabledItem(unloadContent);
+        }
+
+        if (anyInstances) {
+          menu.AddItem(selectInstancesContent, false, () => {
+            var lookup = new HashSet<NetworkObjectTypeId>(selection.Select(x => NetworkObjectTypeId.FromPrefabId(x)));
+            Selection.objects = FindObjectsByType<NetworkObject>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+             .Where(x => x.NetworkTypeId.IsValid && lookup.Contains(x.NetworkTypeId))
+             .Select(x => x.gameObject)
+             .ToArray();
+          });
+        } else {
+          menu.AddDisabledItem(selectInstancesContent);
+        }
+
+        menu.AddSeparator("");
+        
+        if (spawnerRunners.Any()) {
+          if (spawnerRunners.Length > 1) {
+            foreach (var runner in spawnerRunners.Where(x => x.CanSpawn)) {
+              AddSpawnItems($"/{runner.name}", runner);
+            }
+          } else {
+            AddSpawnItems($"", spawnerRunners[0]);
+          }
+        } else {
+          menu.AddDisabledItem(spawnContent);
+          menu.AddDisabledItem(spawnAsyncContent);
+        }
+
+        void AddSpawnItems(string s, NetworkRunner networkRunner) {
+          menu.AddItem(new GUIContent($"{spawnContent.text}{s}"), false, () => {
+            foreach (var id in selection) {
+              networkRunner.TrySpawn(id, out _);
+            }
+          });
+          menu.AddItem(new GUIContent($"{spawnAsyncContent.text}{s}"), false, () => {
+            foreach (var id in selection) {
+              networkRunner.SpawnAsync(id);
+            }
+          });
+        }
+
+        return menu;
+      }
+    }
+  }
+}
+
+
+#endregion
+
+
 #region Assets/Photon/Fusion/Editor/NetworkPrefabSourceFactories.cs
 
 ﻿namespace Fusion.Editor {
@@ -12448,35 +12718,6 @@ namespace Fusion.Editor {
 }
 
 
-
-#endregion
-
-
-#region Assets/Photon/Fusion/Editor/Statistics/FusionStatisticsEditor.cs
-
-namespace Fusion.Statistics {
-  using UnityEngine;
-  using UnityEditor;
-  
-  [CustomEditor(typeof(FusionStatistics))]
-  public class FusionStatisticsEditor : Editor {
-    public override void OnInspectorGUI() {
-      FusionStatistics fusionStatistics = (FusionStatistics)target;
-      
-      EditorGUI.BeginChangeCheck();
-      DrawDefaultInspector();
-
-      if (EditorGUI.EndChangeCheck()) {
-        fusionStatistics.OnEditorChange();
-      }
-      
-      if (GUILayout.Button("Setup Statistics Panel"))
-      {
-        fusionStatistics.SetupStatisticsPanel();
-      }
-    }
-  }
-}
 
 #endregion
 
