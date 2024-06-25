@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace AceTest {
     /// <summary>Dispatcher of network events for Photon Fusion.</summary>
-    public class DispatcherFusion : MonoBehaviour, IDispatcher<DispatchNetworkBase>, IDisposable {
+    public class DispatcherFusion : MonoBehaviour, IDispatcher<DispatchBase>, IDisposable {
 
         #region Instance Vars
 
@@ -16,7 +16,7 @@ namespace AceTest {
         private Dictionary<Type, object> _eventsByType;
 
         /// <summary>Convenience property to automatically cast this dispatcher as an interface.</summary>
-        private IDispatcher<DispatchNetworkBase> Dispatcher => this;
+        private IDispatcher<DispatchBase> Dispatcher => this;
 
         #endregion
 
@@ -24,7 +24,7 @@ namespace AceTest {
 
         #region IDispatcher Implementation
 
-        Dictionary<Type, object> IDispatcher<DispatchNetworkBase>.EventsByType => _eventsByType ??= new();
+        Dictionary<Type, object> IDispatcher<DispatchBase>.EventsByType => _eventsByType ??= new();
 
         #endregion
 
@@ -39,6 +39,8 @@ namespace AceTest {
 
 
         #region Event Handlers
+
+        public void HandleConnectedToServer(NetworkRunner _) => Dispatcher.Invoke(new DispatchNetworkConnectedToServer());
 
         public void HandlePlayerJoined(NetworkRunner _, PlayerRef player) => Dispatcher.Invoke(new DispatchNetworkPlayerJoined() {
             PlayerId = player.PlayerId.ToString(),

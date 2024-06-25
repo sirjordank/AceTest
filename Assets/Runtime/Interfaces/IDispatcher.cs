@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace AceTest {
+    /// <summary>Base class for all other dispatches.</summary>
+    public abstract class DispatchBase { }
+
     /// <summary>Interface to manage an ecosystem of dispatches derived from the given type.</summary>
     /// <typeparam name="TDispatchBase">Base type of dispatch to manage.</typeparam>
-    public interface IDispatcher<TDispatchBase> {
+    public interface IDispatcher<TDispatchBase> where TDispatchBase : DispatchBase {
 
         #region Class Vars
 

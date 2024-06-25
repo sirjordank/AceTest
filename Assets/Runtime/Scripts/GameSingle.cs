@@ -14,6 +14,9 @@ namespace AceTest {
         [SerializeField, Tooltip("FPS camera for the local player.")]
         protected CinemachineVirtualCamera _playerCam;
 
+        [SerializeField, Tooltip("Root transform for all of the targets")]
+        protected Transform _targetsRoot;
+
         [SerializeField, Tooltip("All player actions for the new input system.")]
         protected PlayerInput _playerInput;
 
@@ -27,6 +30,8 @@ namespace AceTest {
         #region IGame Implementation
 
         public InputDefault Input => _input;
+
+        public virtual IDispatcher<DispatchBase> Dispatcher => default;
 
         #endregion
 

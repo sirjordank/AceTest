@@ -1,5 +1,6 @@
 using Fusion;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace AceTest {
     /// <summary>Implementation of the player interface for Photon Fusion.</summary>
@@ -13,14 +14,14 @@ namespace AceTest {
         /// <summary>Reference to all of the renderer components.</summary>
         private Renderer[] Renderers => GetComponentsInChildren<Renderer>();
 
-        [Networked, OnChangedRender(nameof(HandleChangedRender)), Tooltip("Main color of the player.")]
-        public Color MainColor { get; set; }
-
         #endregion
 
 
 
         #region IPlayer Implementation
+
+        [Networked, OnChangedRender(nameof(HandleChangedMainColor))]
+        public Color MainColor { get; set; }
 
         string IPlayer.Id => ColorUtility.ToHtmlStringRGB(MainColor);
 
@@ -31,11 +32,19 @@ namespace AceTest {
         #region Base Methods
 
         private void Start() {
-            if (HasStateAuthority) {
-                MainColor = new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1f);
+            if (!HasStateAuthority) {
+                HandleChangedMainColor();
             } else {
-                HandleChangedRender();
+                MainColor = Color.HSVToRGB(Random.value, 1f, 1f);
             }
+        }
+
+        private void OnEnable() {
+            IGame.Instance.Input.Default.Fire.started += HandleFireStarted;
+        }
+
+        private void OnDisable() {
+            IGame.Instance.Input.Default.Fire.started -= HandleFireStarted;
         }
 
         public override void FixedUpdateNetwork() {
@@ -54,9 +63,20 @@ namespace AceTest {
 
         #region Event Handlers
 
-        private void HandleChangedRender() {
+        private void HandleChangedMainColor() {
             foreach (Renderer r in Renderers) {
                 r.material.color = MainColor;
+            }
+        }
+
+        private void HandleFireStarted(InputAction.CallbackContext _) {
+            if (!HasStateAuthority) return;
+
+            RaycastHit[] hits = Physics.RaycastAll(transform.position, transform.forward);
+            foreach (RaycastHit hit in hits) {
+                if (hit.transform.TryGetComponent(out ITargetable target)) {
+                    target.Hit(this);
+                }
             }
         }
 

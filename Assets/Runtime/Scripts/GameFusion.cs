@@ -16,8 +16,13 @@ namespace AceTest {
         [SerializeField, Tooltip("Photon Fusion implementation for the dispatcher of network events.")]
         private DispatcherFusion _dispatcherFusion;
 
-        /// <summary>Convenience property to automatically cast the dispatcher as an interface.</summary>
-        private IDispatcher<DispatchNetworkBase> DispatcherNetwork => _dispatcherFusion;
+        #endregion
+
+
+
+        #region IGame Implementation
+
+        public override IDispatcher<DispatchBase> Dispatcher => _dispatcherFusion;
 
         #endregion
 
@@ -26,11 +31,13 @@ namespace AceTest {
         #region Base Methods
 
         private void OnEnable() {
-            DispatcherNetwork.Add<DispatchNetworkPlayerJoined>(HandleNetworkPlayerJoined);
+            Dispatcher.Add<DispatchNetworkConnectedToServer>(HandleNetworkConnectedToServer);
+            Dispatcher.Add<DispatchNetworkPlayerJoined>(HandleNetworkPlayerJoined);
         }
 
         private void OnDisable() {
-            DispatcherNetwork.Remove<DispatchNetworkPlayerJoined>(HandleNetworkPlayerJoined);
+            Dispatcher.Remove<DispatchNetworkPlayerJoined>(HandleNetworkPlayerJoined);
+            Dispatcher.Remove<DispatchNetworkConnectedToServer>(HandleNetworkConnectedToServer);
         }
 
         private void OnDestroy() => _dispatcherFusion.Dispose();
@@ -41,9 +48,15 @@ namespace AceTest {
 
         #region Event Handlers
 
+        private void HandleNetworkConnectedToServer(DispatchNetworkConnectedToServer args) {
+            _playerCam.gameObject.SetActive(true);
+            _targetsRoot.gameObject.SetActive(true);
+        }
+
         private void HandleNetworkPlayerJoined(DispatchNetworkPlayerJoined args) {
             if (args.PlayerId == _networkRunner.LocalPlayer.PlayerId.ToString()) {
                 NetworkObject playerObj = _networkRunner.Spawn(_playerPrefab);
+                _networkRunner.SetPlayerObject(_networkRunner.LocalPlayer, playerObj);
                 _playerCam.Follow = playerObj.transform;
             }
         }
