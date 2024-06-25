@@ -1,5 +1,4 @@
 using Fusion;
-using System;
 using UnityEngine;
 
 namespace AceTest {
@@ -8,18 +7,14 @@ namespace AceTest {
 
         #region Instance Vars
 
-        /// <summary>Reference to the internal player struct.</summary>
-        private PlayerRef _playerRef;
+        [SerializeField, Tooltip("How fast the player moves in any direction.")]
+        private float _playerSpeed = 5f;
 
-        private Vector3 _velocity;
-        private CharacterController _controller;
+        /// <summary>Reference to all of the renderer components.</summary>
+        private Renderer[] Renderers => GetComponentsInChildren<Renderer>();
 
-        public float _playerSpeed = 2f;
-
-        private MeshRenderer _meshRenderer;
-
-        [Networked, OnChangedRender(nameof(ColorChanged))]
-        public Color NetworkedColor { get; set; }
+        [Networked, OnChangedRender(nameof(HandleChangedRender)), Tooltip("Main color of the player.")]
+        public Color MainColor { get; set; }
 
         #endregion
 
@@ -27,7 +22,7 @@ namespace AceTest {
 
         #region IPlayer Implementation
 
-        string IPlayer.Id => _playerRef.PlayerId.ToString();
+        string IPlayer.Id => ColorUtility.ToHtmlStringRGB(MainColor);
 
         #endregion
 
@@ -35,53 +30,36 @@ namespace AceTest {
 
         #region Base Methods
 
-        private void Awake() {
-            _controller = GetComponent<CharacterController>();
-            _meshRenderer = GetComponent<MeshRenderer>();
-        }
-
         private void Start() {
             if (HasStateAuthority) {
-                // Changing the material color here directly does not work since this code is only executed on the client pressing the button and not on every client.
-                NetworkedColor = new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1f);
+                MainColor = new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1f);
+            } else {
+                HandleChangedRender();
             }
         }
 
         public override void FixedUpdateNetwork() {
-            // Only move own player and not every other player. Each player controls its own player object.
             if (!HasStateAuthority) return;
-
-            if (_controller.isGrounded) {
-                _velocity = new Vector3(0, -1, 0);
-            }
 
             float x = IGame.Instance.Input.Default.Horizontal.ReadValue<float>();
             float z = IGame.Instance.Input.Default.Vertical.ReadValue<float>();
 
-            Quaternion cameraRotationY = Quaternion.Euler(0, Camera.main.transform.rotation.eulerAngles.y, 0);
-            Vector3 move = cameraRotationY * new Vector3(x, 0, z) * Runner.DeltaTime * _playerSpeed;
-            _controller.Move(move + _velocity * Runner.DeltaTime);
-
-            if (move != Vector3.zero) {
-                gameObject.transform.forward = move;
-            }
+            transform.Translate(_playerSpeed * Runner.DeltaTime * new Vector3(x, 0f, z), Space.Self);
+            transform.SetPositionAndRotation(new Vector3(transform.position.x, 0f, transform.position.z), Camera.main.transform.rotation);
         }
 
         #endregion
 
 
 
-        /// <summary></summary>
-        /// <param name="player"></param>
-        /// <exception cref="ArgumentNullException"></exception>
-        public PlayerFusion(PlayerRef player) {
-            if (player == default) throw new ArgumentNullException();
-            _playerRef = player;
+        #region Event Handlers
+
+        private void HandleChangedRender() {
+            foreach (Renderer r in Renderers) {
+                r.material.color = MainColor;
+            }
         }
 
-        /// <summary></summary>
-        private void ColorChanged() {
-            _meshRenderer.material.color = NetworkedColor;
-        }
+        #endregion
     }
 }

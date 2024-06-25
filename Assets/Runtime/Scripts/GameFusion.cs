@@ -42,8 +42,9 @@ namespace AceTest {
         #region Event Handlers
 
         private void HandleNetworkPlayerJoined(DispatchNetworkPlayerJoined args) {
-            if (_networkRunner.LocalPlayer.PlayerId.ToString() == args.PlayerId) {
-                _networkRunner.Spawn(_playerPrefab, new Vector3(0f, 1f, 0f), Quaternion.identity);
+            if (args.PlayerId == _networkRunner.LocalPlayer.PlayerId.ToString()) {
+                NetworkObject playerObj = _networkRunner.Spawn(_playerPrefab);
+                _playerCam.Follow = playerObj.transform;
             }
         }
 

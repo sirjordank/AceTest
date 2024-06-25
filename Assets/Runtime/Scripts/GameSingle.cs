@@ -1,3 +1,4 @@
+using Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,10 +8,13 @@ namespace AceTest {
 
         #region Instance Vars
 
-        [SerializeField, Tooltip("Reference to the player prefab.")]
+        [SerializeField, Tooltip("Prefab to instantiate the local player.")]
         protected GameObject _playerPrefab;
 
-        [SerializeField, Tooltip("Reference to the player actions for the new input system.")]
+        [SerializeField, Tooltip("FPS camera for the local player.")]
+        protected CinemachineVirtualCamera _playerCam;
+
+        [SerializeField, Tooltip("All player actions for the new input system.")]
         protected PlayerInput _playerInput;
 
         /// <inheritdoc cref="IGame.Input"/>
