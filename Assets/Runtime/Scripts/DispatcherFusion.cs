@@ -1,18 +1,22 @@
 using Fusion;
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace AceTest {
     /// <summary>Dispatcher of network events for Photon Fusion.</summary>
-    public class DispatcherFusion : IDispatcher<DispatchNetworkBase>, IDisposable {
+    public class DispatcherFusion : MonoBehaviour, IDispatcher<DispatchNetworkBase>, IDisposable {
 
         #region Instance Vars
 
-        /// <summary>Instance of events from Photon Fusion.</summary>
+        [SerializeField, Tooltip("Instance of the events from Photon Fusion.")]
         private NetworkEvents _networkEvents;
 
         /// <inheritdoc cref="IDispatcher{TDispatch}.EventsByType"/>
-        private readonly Dictionary<Type, Action<DispatchNetworkBase>> _eventsByType = new();
+        private Dictionary<Type, object> _eventsByType;
+
+        /// <summary>Convenience property to automatically cast this dispatcher as an interface.</summary>
+        private IDispatcher<DispatchNetworkBase> Dispatcher => this;
 
         #endregion
 
@@ -20,7 +24,7 @@ namespace AceTest {
 
         #region IDispatcher Implementation
 
-        Dictionary<Type, Action<DispatchNetworkBase>> IDispatcher<DispatchNetworkBase>.EventsByType => _eventsByType;
+        Dictionary<Type, object> IDispatcher<DispatchNetworkBase>.EventsByType => _eventsByType ??= new();
 
         #endregion
 
@@ -28,25 +32,18 @@ namespace AceTest {
 
         #region IDisposable Implementation
 
-        public void Dispose() {
-            // unsubscribe from all relevant events
-            _networkEvents.PlayerJoined.RemoveAllListeners();
-        }
+        public void Dispose() => _networkEvents.PlayerJoined.RemoveAllListeners();
 
         #endregion
 
 
 
-        /// <summary>Default constructor for this class.</summary>
-        /// <param name="evts">Reference to the events instance from Photon Fusion.</param>
-        public DispatcherFusion(NetworkEvents evts) {
-            if (evts == default) throw new ArgumentNullException();
-            _networkEvents = evts;
+        #region Event Handlers
 
-            // subscribe to all relevant events
-            evts.PlayerJoined.AddListener((_, player) => (this as IDispatcher<DispatchNetworkBase>).Invoke(new DispatchNetworkPlayerJoined() {
-                Player = new FusionPlayer(player),
-            }));
-        }
+        public void HandlePlayerJoined(NetworkRunner _, PlayerRef player) => Dispatcher.Invoke(new DispatchNetworkPlayerJoined() {
+            PlayerId = player.PlayerId.ToString(),
+        });
+
+        #endregion
     }
 }

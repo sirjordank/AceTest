@@ -1,24 +1,11 @@
-using System;
-
 namespace AceTest {
-    /// <summary></summary>
+    /// <summary>Interface to manage a game instance, which acts as a service locator.</summary>
     public interface IGame {
 
         #region Class Vars
 
-        private static IGame _instance;
-
-        /// <summary></summary>
-        public static IGame Instance {
-            get => _instance;
-            set {
-                if (_instance != default) {
-                    throw new InvalidOperationException();
-                }
-
-                _instance = value;
-            }
-        }
+        /// <summary>The only singleton instance in the entire game.</summary>
+        public static IGame Instance { get; protected set; }
 
         #endregion
 
@@ -26,7 +13,7 @@ namespace AceTest {
 
         #region Instance Vars
 
-        /// <summary></summary>
+        /// <summary>Default input containing all of the actions that a player may take.</summary>
         public InputDefault Input { get; }
 
         #endregion

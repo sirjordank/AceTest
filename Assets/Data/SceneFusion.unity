@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.18028378, g: 0.22571412, b: 0.30692285, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657898, g: 0.4964133, b: 0.5748178, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -685,7 +685,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1405250877}
-  - component: {fileID: 1405250878}
+  - component: {fileID: 1405250879}
+  - component: {fileID: 1405250880}
   - component: {fileID: 1405250876}
   - component: {fileID: 1405250875}
   m_Layer: 0
@@ -727,7 +728,19 @@ MonoBehaviour:
       m_Calls: []
   PlayerJoined:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 1405250880}
+        m_TargetAssemblyTypeName: AceTest.DispatcherFusion, Assembly-CSharp
+        m_MethodName: HandlePlayerJoined
+        m_Mode: 0
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   PlayerLeft:
     m_PersistentCalls:
       m_Calls: []
@@ -791,7 +804,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1405250878
+--- !u!114 &1405250879
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -800,11 +813,27 @@ MonoBehaviour:
   m_GameObject: {fileID: 1405250874}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ee326150f37a3d04e921529a7fb607be, type: 3}
+  m_Script: {fileID: 11500000, guid: e071346ad8831a24b97a2c86837ee5ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _playerPrefab: {fileID: 6447900168163198862, guid: 0626f1421ee13dc469fd22a0817b42b5,
-    type: 3}
+  _playerPrefab: {fileID: 6447900168163198862, guid: 0626f1421ee13dc469fd22a0817b42b5, type: 3}
+  _playerInput: {fileID: 32271813}
+  _networkRunner: {fileID: 1405250876}
+  _networkEvents: {fileID: 1405250875}
+  _dispatcherFusion: {fileID: 1405250880}
+--- !u!114 &1405250880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1405250874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b54c61c6fcecf0249ae8c19d4eed7388, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _networkEvents: {fileID: 1405250875}
 --- !u!1 &1610335939
 GameObject:
   m_ObjectHideFlags: 0
@@ -857,10 +886,9 @@ MonoBehaviour:
   ClientStartDelay: 0.1
   ServerPort: 0
   DefaultRoomName: 
+  AlwaysShowStats: 0
   InitialScenePath: 
   _currentStage: 0
-  AutoConnectVirtualInstances: 1
-  VirtualInstanceConnectDelay: 1
 --- !u!4 &1610335942
 Transform:
   m_ObjectHideFlags: 0
@@ -965,51 +993,6 @@ MonoBehaviour:
   AutoEnableInputs: 1
   XYAxis: {fileID: 1592366251731590039, guid: 1c71de3659274df48bdfa6e15cb8e2c0, type: 3}
   ZAxis: {fileID: 0}
---- !u!1 &1802981305
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1802981306}
-  - component: {fileID: 1802981307}
-  m_Layer: 0
-  m_Name: Game
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1802981306
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1802981305}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1802981307
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1802981305}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e071346ad8831a24b97a2c86837ee5ed, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _playerInput: {fileID: 32271813}
 --- !u!1 &1894086733
 GameObject:
   m_ObjectHideFlags: 3
@@ -1143,4 +1126,3 @@ SceneRoots:
   - {fileID: 1610335942}
   - {fileID: 1405250877}
   - {fileID: 1307014736}
-  - {fileID: 1802981306}

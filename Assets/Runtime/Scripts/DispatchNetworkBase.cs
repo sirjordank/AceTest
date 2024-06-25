@@ -4,7 +4,7 @@ namespace AceTest {
 
     /// <summary>Dispatched whenever a player has joined the network.</summary>
     public class DispatchNetworkPlayerJoined : DispatchNetworkBase {
-        /// <summary>Player that has joined the network.</summary>
-        public IPlayer Player { get; set; }
+        /// <summary>ID of the player that joined.</summary>
+        public string PlayerId { get; set; }
     }
 }
