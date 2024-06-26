@@ -15,7 +15,7 @@ namespace AceTest {
         private NetworkEvents _networkEvents;
 
         /// <summary>Completion source for when the local player joins.</summary>
-        private UniTaskCompletionSource _localPlayerJoinedSource = new();
+        private readonly UniTaskCompletionSource _localPlayerJoinedSource = new();
 
         #endregion
 

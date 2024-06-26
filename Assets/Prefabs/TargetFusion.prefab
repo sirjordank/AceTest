@@ -132,7 +132,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e61e531b3b188f4ca086466737752df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  single: {fileID: -6089077808493591767}
+  _single: {fileID: -6089077808493591767}
   _LastPlayerColor: {r: 0, g: 0, b: 0, a: 0}
   _LastHitTime: 0
 --- !u!114 &7971263214793006037

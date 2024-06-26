@@ -8,8 +8,8 @@ namespace AceTest {
 
         #region Instance Vars
 
-        [SerializeField, Tooltip("")]
-        private TargetSingle single;
+        [SerializeField, Tooltip("Reference to the TargetSingle to be decorated.")]
+        private TargetSingle _single;
 
         /// <summary>Color of the player that last hit the target.</summary>
         [Networked]
@@ -28,8 +28,8 @@ namespace AceTest {
 
         private void Awake() {
             // override the start and hit actions of the target
-            single.StartAction = OnStart;
-            single.HitAction = OnHit;
+            _single.StartAction = OnStart;
+            _single.HitAction = OnHit;
         }
 
         #endregion
@@ -42,8 +42,8 @@ namespace AceTest {
             float delta = TargetSingle.ResetDelay - (Runner.SimulationTime - LastHitTime);
 
             if (delta > 0f) {
-                single.MeshRend.material.color = LastPlayerColor;
-                UniTask.Delay((int)(delta * 1000f)).ContinueWith(() => single.MeshRend.material.color = Color.white);
+                _single.MeshRend.material.color = LastPlayerColor;
+                UniTask.Delay((int)(delta * 1000f)).ContinueWith(() => _single.MeshRend.material.color = Color.white);
             }
         }
 
@@ -60,13 +60,13 @@ namespace AceTest {
             float x = Random.Range(TargetSingle.RangeX.x, TargetSingle.RangeX.y);
             float y = Random.Range(TargetSingle.RangeY.x, TargetSingle.RangeY.y);
             float z = Random.Range(TargetSingle.RangeZ.x, TargetSingle.RangeZ.y);
-            single.transform.position = new Vector3(x, y, z);
+            _single.transform.position = new Vector3(x, y, z);
 
             Random.state = current;
         }
 
         /// <inheritdoc cref="TargetSingle.OnHit(TargetSingle, IPlayer)"/>
-        private void OnHit(TargetSingle single, IPlayer player) {
+        private void OnHit(TargetSingle _, IPlayer player) {
             LastPlayerColor = player.MainColor;
             LastHitTime = Runner.SimulationTime;
         }

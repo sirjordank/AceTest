@@ -33,8 +33,10 @@ namespace AceTest {
         /// <summary>Is the target able to be hit?</summary>
         private bool IsHittable => MeshRend.material.color == Color.white;
 
+        /// <summary>Called when the target behaviour starts.</summary>
         public Action<TargetSingle> StartAction { get; set; } = OnStart;
 
+        /// <summary>Called when the target behaviour is hit.</summary>
         public Action<TargetSingle, IPlayer> HitAction { get; set; } = OnHit;
 
         #endregion

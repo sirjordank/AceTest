@@ -1,29 +1,18 @@
 using Fusion;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace AceTest {
     /// <summary>Decorator for a PlayerSingle to add Photon Fusion compatibility.</summary>
-    public class PlayerFusion : NetworkBehaviour, IPlayer {
+    public class PlayerFusion : NetworkBehaviour {
 
         #region Instance Vars
 
-        [SerializeField, Tooltip("How fast the player moves in any direction.")]
-        private float _playerSpeed = 5f;
+        [SerializeField, Tooltip("Reference to the PlayerSingle to be decorated.")]
+        private PlayerSingle _single;
 
-        /// <summary>Reference to all of the renderer components.</summary>
-        private Renderer[] Renderers => GetComponentsInChildren<Renderer>();
-
-        #endregion
-
-
-
-        #region IPlayer Implementation
-
+        /// <summary>Color of the player according to the network.</summary>
         [Networked, OnChangedRender(nameof(HandleChangedMainColor))]
-        public Color MainColor { get; set; }
-
-        string IPlayer.Id => ColorUtility.ToHtmlStringRGB(MainColor);
+        public Color NetworkColor { get; set; }
 
         #endregion
 
@@ -31,31 +20,13 @@ namespace AceTest {
 
         #region Base Methods
 
-        private void Start() {
-            if (!HasStateAuthority) {
-                HandleChangedMainColor();
-            } else {
-                MainColor = Color.HSVToRGB(Random.value, 1f, 1f);
-            }
+        private void Awake() {
+            // override the start and update actions of the player
+            _single.StartAction = OnStart;
+            _single.UpdateAction = OnUpdate;
         }
 
-        private void OnEnable() {
-            IGame.Instance.Input.Default.Fire.started += HandleFireStarted;
-        }
-
-        private void OnDisable() {
-            IGame.Instance.Input.Default.Fire.started -= HandleFireStarted;
-        }
-
-        public override void FixedUpdateNetwork() {
-            if (!HasStateAuthority) return;
-
-            float x = IGame.Instance.Input.Default.Horizontal.ReadValue<float>();
-            float z = IGame.Instance.Input.Default.Vertical.ReadValue<float>();
-
-            transform.Translate(_playerSpeed * Runner.DeltaTime * new Vector3(x, 0f, z), Space.Self);
-            transform.SetPositionAndRotation(new Vector3(transform.position.x, 0f, transform.position.z), Camera.main.transform.rotation);
-        }
+        public override void FixedUpdateNetwork() => _single.ApplyTransformations(Runner.DeltaTime);
 
         #endregion
 
@@ -63,23 +34,22 @@ namespace AceTest {
 
         #region Event Handlers
 
-        private void HandleChangedMainColor() {
-            foreach (Renderer r in Renderers) {
-                r.material.color = MainColor;
-            }
-        }
-
-        private void HandleFireStarted(InputAction.CallbackContext _) {
-            if (!HasStateAuthority) return;
-
-            RaycastHit[] hits = Physics.RaycastAll(transform.position, transform.forward);
-            foreach (RaycastHit hit in hits) {
-                if (hit.transform.TryGetComponent(out ITargetable target)) {
-                    target.Hit(this);
-                }
-            }
-        }
+        private void HandleChangedMainColor() => (_single as IPlayer).MainColor = NetworkColor;
 
         #endregion
+
+
+
+        /// <inheritdoc cref="PlayerSingle.OnStart(PlayerSingle)"/>
+        private void OnStart(PlayerSingle _) {
+            if (!HasStateAuthority) {
+                HandleChangedMainColor();
+            } else {
+                NetworkColor = Color.HSVToRGB(Random.value, 1f, 1f);
+            }
+        }
+
+        /// <inheritdoc cref="PlayerSingle.OnUpdate(PlayerSingle)"/>
+        private void OnUpdate(PlayerSingle _) { }
     }
 }

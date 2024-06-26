@@ -64,6 +64,7 @@ namespace AceTest {
         /// <returns>An awaitable task.</returns>
         protected virtual UniTask Play() {
             GameObject playerObj = CreateLocalPlayerObject();
+            playerObj.GetComponent<IPlayer>().IsLocal = true;
             _playerCam.Follow = playerObj.transform;
             _playerCam.gameObject.SetActive(true);
             _targetsRoot.gameObject.SetActive(true);
