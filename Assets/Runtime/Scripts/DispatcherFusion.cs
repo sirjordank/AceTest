@@ -40,8 +40,6 @@ namespace AceTest {
 
         #region Event Handlers
 
-        public void HandleConnectedToServer(NetworkRunner _) => Dispatcher.Invoke(new DispatchNetworkConnectedToServer());
-
         public void HandlePlayerJoined(NetworkRunner _, PlayerRef player) => Dispatcher.Invoke(new DispatchNetworkPlayerJoined() {
             PlayerId = player.PlayerId.ToString(),
         });

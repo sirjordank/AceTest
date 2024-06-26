@@ -5,7 +5,7 @@ using UnityEngine;
 namespace AceTest {
     /// <summary>Manages all functionality related to a basic target.</summary>
     [RequireComponent(typeof(MeshRenderer))]
-    public class TargetBasic : NetworkBehaviour, ITargetable {
+    public class TargetFusion : NetworkBehaviour, ITargetable {
 
         #region Class Vars
 
