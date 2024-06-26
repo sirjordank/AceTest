@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace AceTest {
-    /// <summary>Implementation of the player interface for Photon Fusion.</summary>
+    /// <summary>Decorator for a PlayerSingle to add Photon Fusion compatibility.</summary>
     public class PlayerFusion : NetworkBehaviour, IPlayer {
 
         #region Instance Vars

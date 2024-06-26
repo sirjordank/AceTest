@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace AceTest {
     /// <summary>Dispatcher of main events for single-player.</summary>
-    public class DispatcherSingle : IDispatcher<DispatchBase> {
+    public class DispatcherSingle : MonoBehaviour, IDispatcher<DispatchBase> {
 
         #region Instance Vars
 
