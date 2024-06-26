@@ -67,7 +67,11 @@ namespace AceTest {
             playerObj.GetComponent<IPlayer>().IsLocal = true;
             _playerCam.Follow = playerObj.transform;
             _playerCam.gameObject.SetActive(true);
-            _targetsRoot.gameObject.SetActive(true);
+
+            foreach (Transform child in _targetsRoot) {
+                child.gameObject.SetActive(true);
+            }
+
             return UniTask.CompletedTask;
         }
     }

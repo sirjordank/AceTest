@@ -43,7 +43,10 @@ namespace AceTest {
 
             if (delta > 0f) {
                 _single.MeshRend.material.color = LastPlayerColor;
-                UniTask.Delay((int)(delta * 1000f)).ContinueWith(() => _single.MeshRend.material.color = Color.white);
+                UniTask.Delay((int)(delta * 1000f)).ContinueWith(() => {
+                    _single.MeshRend.material.color = Color.white;
+                    Object.ReleaseStateAuthority();
+                });
             }
         }
 
@@ -53,22 +56,27 @@ namespace AceTest {
 
         /// <inheritdoc cref="TargetSingle.OnStart(TargetSingle)"/>
         private void OnStart(TargetSingle _) {
-            Random.State current = Random.state;
+            UniTask.WaitUntil(() => Id.Object.IsValid).ContinueWith(() => {
+                Random.State current = Random.state;
 
-            // pseudo-randomize the position based on the network ID
-            Random.InitState((int)Object.Id.Raw);
-            float x = Random.Range(TargetSingle.RangeX.x, TargetSingle.RangeX.y);
-            float y = Random.Range(TargetSingle.RangeY.x, TargetSingle.RangeY.y);
-            float z = Random.Range(TargetSingle.RangeZ.x, TargetSingle.RangeZ.y);
-            _single.transform.position = new Vector3(x, y, z);
+                // pseudo-randomize the position based on the network ID
+                Random.InitState((int)Id.Object.Raw);
+                float x = Random.Range(TargetSingle.RangeX.x, TargetSingle.RangeX.y);
+                float y = Random.Range(TargetSingle.RangeY.x, TargetSingle.RangeY.y);
+                float z = Random.Range(TargetSingle.RangeZ.x, TargetSingle.RangeZ.y);
+                _single.transform.position = new Vector3(x, y, z);
 
-            Random.state = current;
+                Random.state = current;
+            });
         }
 
         /// <inheritdoc cref="TargetSingle.OnHit(TargetSingle, IPlayer)"/>
         private void OnHit(TargetSingle _, IPlayer player) {
-            LastPlayerColor = player.MainColor;
-            LastHitTime = Runner.SimulationTime;
+            Object.RequestStateAuthority();
+            UniTask.WaitUntil(() => Object.HasStateAuthority).ContinueWith(() => {
+                LastPlayerColor = player.MainColor;
+                LastHitTime = Runner.SimulationTime;
+            });
         }
     }
 }
